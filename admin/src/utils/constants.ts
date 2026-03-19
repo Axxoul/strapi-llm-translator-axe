@@ -7,3 +7,4 @@ export const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1';
 
 export const MAX_LLM_TEMPERATURE = 2;
 export const MIN_LLM_TEMPERATURE = 0.1;
+export const DEFAULT_DEBUG_LOGS = false;

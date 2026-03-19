@@ -58,4 +58,5 @@ export interface PluginConfig {
   temperature: number;
   llmModel?: string;
   llmBaseUrl?: string;
+  debugLogs?: boolean;
 }

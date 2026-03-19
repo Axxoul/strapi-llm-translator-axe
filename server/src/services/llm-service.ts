@@ -25,6 +25,10 @@ import {
   safeJSONParse,
 } from '../utils/json-utils';
 
+const debugLog = (userConfig: PluginUserConfig | undefined, ...args: any[]) => {
+  if (userConfig?.debugLogs) console.log('[LLM Translator]', ...args);
+};
+
 const getEffectiveBaseUrl = (userConfig?: PluginUserConfig): string => {
   return userConfig?.llmBaseUrl
     || process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL
@@ -276,7 +280,17 @@ const llmService = ({ strapi }: { strapi: Core.Strapi }): LLMServiceType => ({
     try {
       const userConfig = await getUserConfig();
 
+      debugLog(userConfig, 'Starting translation', {
+        model: getEffectiveModel(userConfig),
+        baseUrl: getEffectiveBaseUrl(userConfig),
+        targetLanguage: config.targetLanguage,
+        contentTypeUID: contentType.uid,
+      });
+
       const translatableFields = extractTranslatableFields(contentType, fields, components);
+
+      debugLog(userConfig, 'Translatable fields found:', translatableFields.length,
+        'paths:', translatableFields.map(f => f.path.join('.')));
 
       // Split translatableFields in batches
       const batches: TranslatableField[][] = [];
@@ -284,14 +298,21 @@ const llmService = ({ strapi }: { strapi: Core.Strapi }): LLMServiceType => ({
         batches.push(translatableFields.slice(i, i + BATCH_SIZE));
       }
 
+      debugLog(userConfig, 'Batching:', batches.length, 'batch(es),', BATCH_SIZE, 'fields per batch max');
+
       const systemPrompt = await buildSystemPrompt(userConfig);
 
       // Process all batches parallel
       const translatedResults = await Promise.all(
-        batches.map(async (batch) => {
+        batches.map(async (batch, batchIndex) => {
+          debugLog(userConfig, `Batch ${batchIndex + 1}/${batches.length}:`,
+            'fields:', batch.map(f => f.path.join('.')));
           const translationPayload = prepareTranslationPayload(batch);
           const prompt = buildPrompt(translationPayload, config.targetLanguage);
           const response = await callLLMProvider(prompt, systemPrompt, userConfig);
+          debugLog(userConfig, `Batch ${batchIndex + 1} response:`,
+            'status:', response.choices?.[0]?.finish_reason,
+            'usage:', response.usage ?? 'N/A');
           return await parseLLMResponse(response, userConfig);
         })
       );
@@ -306,12 +327,17 @@ const llmService = ({ strapi }: { strapi: Core.Strapi }): LLMServiceType => ({
 
       // Handle UID fields as they might have a relation base to another translated field
       const uidFields = findUIDFields(contentType);
+      if (uidFields.length > 0) {
+        debugLog(userConfig, 'Regenerating UID fields:', uidFields.map(f => f.fieldName));
+      }
       const translatedUIDs = await generateUIDsForTranslatedFields(
         uidFields,
         translatedData,
         contentType.uid,
         mergedContent
       );
+
+      debugLog(userConfig, 'Translation complete. Total fields translated:', translatableFields.length);
 
       return {
         data: {
@@ -438,13 +464,19 @@ const parseLLMResponse = async (response: any, userConfig?: PluginUserConfig): P
     const jsonContent = extractJSONObject(cleanContent);
 
     try {
-      return safeJSONParse(jsonContent);
+      const parsed = safeJSONParse(jsonContent);
+      debugLog(userConfig, 'JSON parsed successfully on first attempt');
+      return parsed;
     } catch (parseError) {
+      debugLog(userConfig, 'JSON parse failed, attempting brace balancing');
       const balancedContent = balanceJSONBraces(jsonContent);
 
       try {
-        return safeJSONParse(balancedContent);
+        const parsed = safeJSONParse(balancedContent);
+        debugLog(userConfig, 'JSON parsed successfully after brace balancing');
+        return parsed;
       } catch (secondError) {
+        debugLog(userConfig, 'Brace balancing failed, requesting LLM correction');
         console.error('Second parse attempt failed:', secondError);
         return await requestJSONCorrection(cleanContent, userConfig);
       }

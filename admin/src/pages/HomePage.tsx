@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Checkbox,
   Field,
   Flex,
   Main,
@@ -18,6 +19,7 @@ import { PLUGIN_ID } from '../../src/pluginId';
 import { PluginConfig } from '../../custom';
 import { PluginIcon } from '../../src/components/PluginIcon';
 import {
+  DEFAULT_DEBUG_LOGS,
   DEFAULT_LLM_BASE_URL,
   DEFAULT_LLM_MODEL,
   DEFAULT_LLM_TEMPERATURE,
@@ -34,8 +36,9 @@ const HomePage = () => {
   const [config, setConfig] = useState({
     systemPrompt: '',
     temperature: 0.3,
-    llmModel: (process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_MODEL as string) || DEFAULT_LLM_MODEL,
-    llmBaseUrl: (process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL as string) || DEFAULT_LLM_BASE_URL,
+    llmModel: '',
+    llmBaseUrl: '',
+    debugLogs: DEFAULT_DEBUG_LOGS,
   });
   const { formatMessage } = useIntl();
   const { get, post } = useFetchClient();
@@ -58,8 +61,9 @@ const HomePage = () => {
     const defaults = {
       systemPrompt: DEFAULT_SYSTEM_PROMPT,
       temperature: DEFAULT_LLM_TEMPERATURE,
-      llmModel: (process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_MODEL as string) || DEFAULT_LLM_MODEL,
-      llmBaseUrl: (process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL as string) || DEFAULT_LLM_BASE_URL,
+      llmModel: '',
+      llmBaseUrl: '',
+      debugLogs: DEFAULT_DEBUG_LOGS,
     };
     setConfig(defaults);
     await post(`/${PLUGIN_ID}/config`, defaults);
@@ -226,6 +230,24 @@ const HomePage = () => {
                 <Field.Hint />
               </Field.Root>
             </Flex>
+            <Box marginTop={6}>
+              <Checkbox
+                checked={config.debugLogs}
+                onCheckedChange={(checked: boolean) =>
+                  setConfig({ ...config, debugLogs: checked })
+                }
+                hint={formatMessage({
+                  id: getTranslation('plugin.page.form.debug_logs_hint'),
+                  defaultMessage:
+                    'Enable verbose server-side logging for troubleshooting translations',
+                })}
+              >
+                {formatMessage({
+                  id: getTranslation('plugin.page.form.debug_logs'),
+                  defaultMessage: 'Debug Logs',
+                })}
+              </Checkbox>
+            </Box>
             <Flex gap={2} marginTop={6} justifyContent="flex-end">
               <Button variant="secondary" type="button" onClick={handleRestore} marginTop={4}>
                 {formatMessage({
