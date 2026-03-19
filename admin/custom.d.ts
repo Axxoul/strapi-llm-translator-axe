@@ -46,4 +46,7 @@ export interface TranslatorButtonState {
 
 export interface PluginConfig {
   systemPrompt: string;
+  temperature: number;
+  llmModel?: string;
+  llmBaseUrl?: string;
 }

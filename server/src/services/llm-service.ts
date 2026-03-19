@@ -25,12 +25,24 @@ import {
   safeJSONParse,
 } from '../utils/json-utils';
 
-const llmClient = new OpenAI({
-  baseURL: process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL ?? DEFAULT_LLM_BASE_URL,
-  apiKey: process.env.LLM_TRANSLATOR_LLM_API_KEY ?? 'not_set',
-});
+const getEffectiveBaseUrl = (userConfig?: PluginUserConfig): string => {
+  return userConfig?.llmBaseUrl
+    || process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL
+    || DEFAULT_LLM_BASE_URL;
+};
 
-const LLM_MODEL = process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_MODEL ?? DEFAULT_LLM_MODEL;
+const getEffectiveModel = (userConfig?: PluginUserConfig): string => {
+  return userConfig?.llmModel
+    || process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_MODEL
+    || DEFAULT_LLM_MODEL;
+};
+
+const getLLMClient = (userConfig?: PluginUserConfig): OpenAI => {
+  return new OpenAI({
+    baseURL: getEffectiveBaseUrl(userConfig),
+    apiKey: process.env.LLM_TRANSLATOR_LLM_API_KEY ?? 'not_set',
+  });
+};
 
 const BATCH_SIZE = 10; // TODO
 
@@ -280,7 +292,7 @@ const llmService = ({ strapi }: { strapi: Core.Strapi }): LLMServiceType => ({
           const translationPayload = prepareTranslationPayload(batch);
           const prompt = buildPrompt(translationPayload, config.targetLanguage);
           const response = await callLLMProvider(prompt, systemPrompt, userConfig);
-          return await parseLLMResponse(response);
+          return await parseLLMResponse(response, userConfig);
         })
       );
 
@@ -363,10 +375,12 @@ const buildSystemPrompt = async (userConfig: PluginUserConfig): Promise<string> 
 
 const createLLMRequest = (
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  temperature = 0.1
+  temperature = 0.1,
+  userConfig?: PluginUserConfig
 ) => {
-  return llmClient.chat.completions.create({
-    model: LLM_MODEL,
+  const client = getLLMClient(userConfig);
+  return client.chat.completions.create({
+    model: getEffectiveModel(userConfig),
     messages,
     temperature,
     response_format: { type: 'json_object' },
@@ -389,11 +403,12 @@ const callLLMProvider = async (
         content: prompt,
       },
     ],
-    userConfig?.temperature ?? DEFAULT_LLM_TEMPERATURE
+    userConfig?.temperature ?? DEFAULT_LLM_TEMPERATURE,
+    userConfig
   );
 };
 
-const requestJSONCorrection = async (invalidJson: string): Promise<Record<string, any>> => {
+const requestJSONCorrection = async (invalidJson: string, userConfig?: PluginUserConfig): Promise<Record<string, any>> => {
   const response = await createLLMRequest([
     {
       role: 'system',
@@ -403,7 +418,10 @@ const requestJSONCorrection = async (invalidJson: string): Promise<Record<string
       role: 'user',
       content: `${USER_PROMPT_FIX_PREFIX} ${invalidJson}`,
     },
-  ]);
+  ],
+    undefined,
+    userConfig
+  );
 
   const correctedContent = response.choices[0]?.message?.content;
   if (!correctedContent) throw new Error('No content in correction response');
@@ -411,7 +429,7 @@ const requestJSONCorrection = async (invalidJson: string): Promise<Record<string
   return safeJSONParse(correctedContent.trim());
 };
 
-const parseLLMResponse = async (response: any): Promise<Record<string, any>> => {
+const parseLLMResponse = async (response: any, userConfig?: PluginUserConfig): Promise<Record<string, any>> => {
   try {
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error('No content in response');
@@ -428,7 +446,7 @@ const parseLLMResponse = async (response: any): Promise<Record<string, any>> => 
         return safeJSONParse(balancedContent);
       } catch (secondError) {
         console.error('Second parse attempt failed:', secondError);
-        return await requestJSONCorrection(cleanContent);
+        return await requestJSONCorrection(cleanContent, userConfig);
       }
     }
   } catch (error) {

@@ -25,4 +25,6 @@ export type RequestContext<Body = object, PathParams = object, QueryParams = obj
 export interface PluginUserConfig {
   systemPrompt: string;
   temperature: number;
+  llmModel?: string;
+  llmBaseUrl?: string;
 }

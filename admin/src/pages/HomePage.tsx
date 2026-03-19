@@ -18,6 +18,8 @@ import { PLUGIN_ID } from '../../src/pluginId';
 import { PluginConfig } from '../../custom';
 import { PluginIcon } from '../../src/components/PluginIcon';
 import {
+  DEFAULT_LLM_BASE_URL,
+  DEFAULT_LLM_MODEL,
   DEFAULT_LLM_TEMPERATURE,
   DEFAULT_SYSTEM_PROMPT,
   MAX_LLM_TEMPERATURE,
@@ -29,7 +31,12 @@ interface FormEvent extends React.FormEvent<HTMLFormElement> {
 }
 
 const HomePage = () => {
-  const [config, setConfig] = useState({ systemPrompt: '', temperature: 0.3 });
+  const [config, setConfig] = useState({
+    systemPrompt: '',
+    temperature: 0.3,
+    llmModel: (process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_MODEL as string) || DEFAULT_LLM_MODEL,
+    llmBaseUrl: (process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL as string) || DEFAULT_LLM_BASE_URL,
+  });
   const { formatMessage } = useIntl();
   const { get, post } = useFetchClient();
 
@@ -48,11 +55,14 @@ const HomePage = () => {
   };
 
   const handleRestore = async (): Promise<void> => {
-    setConfig({ systemPrompt: DEFAULT_SYSTEM_PROMPT, temperature: DEFAULT_LLM_TEMPERATURE });
-    await post(`/${PLUGIN_ID}/config`, {
+    const defaults = {
       systemPrompt: DEFAULT_SYSTEM_PROMPT,
       temperature: DEFAULT_LLM_TEMPERATURE,
-    });
+      llmModel: (process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_MODEL as string) || DEFAULT_LLM_MODEL,
+      llmBaseUrl: (process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL as string) || DEFAULT_LLM_BASE_URL,
+    };
+    setConfig(defaults);
+    await post(`/${PLUGIN_ID}/config`, defaults);
   };
 
   return (
@@ -78,7 +88,7 @@ const HomePage = () => {
           {formatMessage({
             id: getTranslation('plugin.page.description'),
             defaultMessage:
-              'Configure the LLM Translator plugin settings. Be aware that Base Model, API Key and LLM Base URL need to be set as environment variables.',
+              'Configure the LLM Translator plugin settings. The API Key must be set as an environment variable. Model and Base URL can be configured here or via environment variables.',
           })}
         </Typography>
       </Box>
@@ -167,7 +177,7 @@ const HomePage = () => {
                 hint={formatMessage({
                   id: getTranslation('plugin.page.form.llm_model_hint'),
                   defaultMessage:
-                    'Model that will be used to generate the translations. It should be set as an environment variable.',
+                    'Model that will be used to generate the translations. Can also be set via STRAPI_ADMIN_LLM_TRANSLATOR_LLM_MODEL env var.',
                 })}
               >
                 <Field.Label>
@@ -178,8 +188,11 @@ const HomePage = () => {
                 </Field.Label>
                 <TextInput
                   id="llm_model"
-                  value={process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_MODEL as string}
-                  disabled
+                  value={config.llmModel as string}
+                  onChange={(e: { target: { value: string } }) =>
+                    setConfig({ ...config, llmModel: e.target.value })
+                  }
+                  placeholder={DEFAULT_LLM_MODEL}
                   name="llm_model"
                 />
                 <Field.Error />
@@ -191,7 +204,7 @@ const HomePage = () => {
                 hint={formatMessage({
                   id: getTranslation('plugin.page.form.llm_base_url_hint'),
                   defaultMessage:
-                    'Base URL for the LLM API. It needs to be set as an environment variable.',
+                    'Base URL for the LLM API. Can also be set via STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL env var.',
                 })}
               >
                 <Field.Label>
@@ -202,8 +215,11 @@ const HomePage = () => {
                 </Field.Label>
                 <TextInput
                   id="llm_base_url"
-                  value={process.env.STRAPI_ADMIN_LLM_TRANSLATOR_LLM_BASE_URL as string}
-                  disabled
+                  value={config.llmBaseUrl as string}
+                  onChange={(e: { target: { value: string } }) =>
+                    setConfig({ ...config, llmBaseUrl: e.target.value })
+                  }
+                  placeholder={DEFAULT_LLM_BASE_URL}
                   name="llm_base_url"
                 />
                 <Field.Error />
